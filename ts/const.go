@@ -14,8 +14,10 @@ const (
 
 	EITCurrentStreamTID uint8 = 0x4E
 
-	ContentDescTagID uint8 = 0x54
-	AudioDescTagID   uint8 = 0xc4
+	ShortEventDescTagID    uint8 = 0x4d
+	ExtendedEventDescTagID uint8 = 0x4e
+	ContentDescTagID       uint8 = 0x54
+	AudioDescTagID         uint8 = 0xc4
 
 	AnimeGenreIDMask uint8 = 0x70
 	TokusatuGenreID  uint8 = 0x72

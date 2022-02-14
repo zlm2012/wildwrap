@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"github.com/zlm2012/wildwrap/b24"
 	"io"
 	"log"
 )
@@ -13,8 +14,9 @@ type Decoder struct {
 }
 
 type EITFrame struct {
-	Anime    bool
-	DualMono bool
+	DualMono        bool
+	Contents        EITContentDescriptor
+	ShortDescriptor EITShortEventDescriptor
 }
 
 func NewDecoder(reader io.Reader) *Decoder {
@@ -43,10 +45,17 @@ func (d *Decoder) ReadNextCurrentStreamEITFrame() (*EITFrame, error) {
 				return nil, err
 			}
 		}
+		if tagID == ShortEventDescTagID {
+			eitFrame.ShortDescriptor.LangCode = string(tagContent[0:3])
+			eitFrame.ShortDescriptor.EventName = b24.DecodeString(tagContent[4:], int(tagContent[3]))
+			eitFrame.ShortDescriptor.Text = b24.DecodeString(tagContent[4+tagContent[3]+1:], int(tagContent[4+tagContent[3]]))
+		}
 		if tagID == ContentDescTagID {
 			genreRead = true
-			if tagContent[0]&AnimeGenreIDMask == AnimeGenreIDMask && tagContent[0]&TokusatuGenreID != TokusatuGenreID {
-				eitFrame.Anime = true
+			genreCount := len(tagContent) / 2
+			entries := make([]EITContentDescriptorEntry, genreCount)
+			for i := 0; i < genreCount; i++ {
+				entries[i] = EITContentDescriptorEntry{SubGenre(tagContent[2*i]), tagContent[2*i+1]}
 			}
 		}
 		if tagID == AudioDescTagID {
@@ -55,6 +64,7 @@ func (d *Decoder) ReadNextCurrentStreamEITFrame() (*EITFrame, error) {
 				eitFrame.DualMono = true
 			}
 		}
+
 		if genreRead && audioRead {
 			return &eitFrame, nil
 		}
