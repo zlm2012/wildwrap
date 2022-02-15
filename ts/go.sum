@@ -2,6 +2,8 @@ github.com/zlm2012/wildwrap/b24 v0.0.0-20220214154123-2df6c9817082 h1:XEjCOoHGGc
 github.com/zlm2012/wildwrap/b24 v0.0.0-20220214154123-2df6c9817082/go.mod h1:cJv75ybXbN2OPTLyLpgccnYOb23TcIpcRLJ6mNbqxSc=
 github.com/zlm2012/wildwrap/b24 v0.0.0-20220215125348-3c126214b3fe h1:HowFYWABHFvZ2HRhDLC679YpOVAqVC0uLcBlM+k+eyk=
 github.com/zlm2012/wildwrap/b24 v0.0.0-20220215125348-3c126214b3fe/go.mod h1:cJv75ybXbN2OPTLyLpgccnYOb23TcIpcRLJ6mNbqxSc=
+github.com/zlm2012/wildwrap/b24 v0.0.0-20220215133019-4c33a51552ea h1:rNJM/6lqGSPRCFwGrkP3Ge81HbxJbho3rQW52mT9nbY=
+github.com/zlm2012/wildwrap/b24 v0.0.0-20220215133019-4c33a51552ea/go.mod h1:cJv75ybXbN2OPTLyLpgccnYOb23TcIpcRLJ6mNbqxSc=
 golang.org/x/text v0.3.7 h1:olpwvP2KacW1ZWvsR7uQhoyTYvKAupfQrRGBFM352Gk=
 golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
 golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
