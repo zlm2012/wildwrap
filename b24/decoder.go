@@ -254,7 +254,10 @@ func (s *decodeState) decodeGR(bytes []byte, repeatTime int) (string, int, error
 
 func (s *decodeState) decodeByGCharset(bytes []byte, gset b24GCharset, repeatTime int) (string, int, error) {
 	b0 := 0x7f&bytes[0] - 0x20
-	b1 := 0x7f&bytes[1] - 0x20
+	b1 := uint8(0)
+	if len(bytes) > 1 {
+		b1 = 0x7f&bytes[1] - 0x20
+	}
 	resultString := ""
 	seqLen := 0
 	var err error = nil
@@ -341,7 +344,10 @@ func DecodeString(bytes []byte) (string, error) {
 			repeated = !repeated
 		}
 		b := bytes[i]
-		b1 := bytes[i+1]
+		b1 := uint8(0)
+		if i+1 < len(bytes) {
+			b1 = bytes[i+1]
+		}
 		if inMarcoDef {
 			if b == 0x95 && b1 == 0x4f {
 				// MARCO DEF END

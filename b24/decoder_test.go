@@ -19,5 +19,4 @@ func TestDecodeString(t *testing.T) {
 	if decoded != "[新]仮面ライダーリバイス　第1話「家族!契約!悪魔ささやく!」[デ][字]" {
 		t.Fatalf("result is not what expected: %s", decoded)
 	}
-	t.Log()
 }
