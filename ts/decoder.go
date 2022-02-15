@@ -47,7 +47,7 @@ func (d *Decoder) ReadNextCurrentStreamEITFrame() (*EITFrame, error) {
 		}
 		if tagID == ShortEventDescTagID {
 			eitFrame.ShortDescriptor.LangCode = string(tagContent[0:3])
-			eitFrame.ShortDescriptor.EventName, err = b24.DecodeString(tagContent[4:])
+			eitFrame.ShortDescriptor.EventName, err = b24.DecodeString(tagContent[4 : 4+tagContent[3]])
 			if err != nil {
 				return nil, err
 			}
