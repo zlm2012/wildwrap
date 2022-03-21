@@ -11,39 +11,7 @@ import (
 	"time"
 )
 
-type PATFrame struct {
-	TransportStreamID []byte
-	Version           uint8
-	CurrentNext       bool
-	Section           uint8
-	LastSection       uint8
-
-	NetworkPID uint16
-	SidPidMap  map[uint16]uint16
-}
-
-func (f *PATFrame) IsParsed() bool {
-	return true
-}
-
-func (f *PATFrame) GetType() string {
-	return "PAT"
-}
-
-type PMTFrame struct {
-	PcrPID        uint16
-	StreamPidList []uint16
-}
-
-func (f *PMTFrame) IsParsed() bool {
-	return true
-}
-
-func (f *PMTFrame) GetType() string {
-	return "PMT"
-}
-
-type FrameBuffer struct {
+type frameBuffer struct {
 	buf         []byte
 	lastCounter uint8
 	sectionLen  uint16
@@ -54,7 +22,7 @@ type Decoder struct {
 	lastPat     *PATFrame
 	lastPmtMap  map[uint16]*PMTFrame
 	selectedSid uint16
-	pidBuffer   map[uint16]*FrameBuffer
+	pidBuffer   map[uint16]*frameBuffer
 	pidToParse  map[uint16]func([]byte, *Decoder) (Frame, error)
 }
 
@@ -75,33 +43,8 @@ func (f *GeneralFrame) GetType() string {
 	return "generic"
 }
 
-type EITFrame struct {
-	TableID uint8
-	Entries []EITFrameEntry
-}
-
-type EITFrameEntry struct {
-	EventID            uint16
-	StartTime          time.Time
-	Duration           time.Duration
-	RunningState       SDTRunningState
-	FreeCA             bool
-	DualMono           bool
-	Contents           EITContentDescriptor
-	ShortDescriptor    EITShortEventDescriptor
-	ExtendedDescriptor []EITExtendedEventDescriptor
-}
-
-func (f *EITFrame) IsParsed() bool {
-	return true
-}
-
-func (f *EITFrame) GetType() string {
-	return "EIT"
-}
-
 func NewDecoder(reader io.Reader) *Decoder {
-	return &Decoder{reader, nil, make(map[uint16]*PMTFrame), 0, make(map[uint16]*FrameBuffer), map[uint16]func([]byte, *Decoder) (Frame, error){0x0: parsePAT, 0x12: parseEIT}}
+	return &Decoder{reader, nil, make(map[uint16]*PMTFrame), 0, make(map[uint16]*frameBuffer), map[uint16]func([]byte, *Decoder) (Frame, error){0x0: parsePAT, 0x12: parseEIT}}
 }
 
 func (d *Decoder) ParseNext() (Frame, error) {
@@ -131,7 +74,7 @@ func (d *Decoder) ParseNext() (Frame, error) {
 				payloadOffset := payload[0]
 				newPayload := payload[1+payloadOffset:]
 				sectionLen := binary.BigEndian.Uint16(newPayload[1:3])&0xfff + 3
-				d.pidBuffer[PID] = &FrameBuffer{newPayload, counter, sectionLen}
+				d.pidBuffer[PID] = &frameBuffer{newPayload, counter, sectionLen}
 			} else if pidBuf.lastCounter == counter {
 				continue
 			} else if (pidBuf.lastCounter == 0xf && counter == 0) || pidBuf.lastCounter+1 == counter {
@@ -140,7 +83,7 @@ func (d *Decoder) ParseNext() (Frame, error) {
 					payloadOffset := payload[0]
 					newPayload := payload[1+payloadOffset:]
 					sectionLen := binary.BigEndian.Uint16(newPayload[1:3])&0xfff + 3
-					d.pidBuffer[PID] = &FrameBuffer{newPayload, counter, sectionLen}
+					d.pidBuffer[PID] = &frameBuffer{newPayload, counter, sectionLen}
 
 					// Parse
 					parseFunc, _ := d.pidToParse[PID]
@@ -159,6 +102,103 @@ func (d *Decoder) ParseNext() (Frame, error) {
 			}
 		}
 	}
+}
+
+func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
+	if (payload[0] != 0x40 && payload[0] != 0x41) || payload[1]&0xf0 != 0xf0 {
+		return nil, errors.New("illegal NIT frame")
+	}
+
+	frame := NITFrame{}
+	frame.TransportStreams = make([]NITTransportEntry, 0)
+	frame.ServiceList = make(map[uint16]ServiceType)
+	frame.NetworkID = binary.BigEndian.Uint16(payload[3:5])
+	frame.CurrentNext = payload[5]&1 == 1
+	frame.Section = payload[6]
+	frame.LastSection = payload[7]
+	networkDescLen := binary.BigEndian.Uint16(payload[8:10]) & 0xfff
+
+	// network descriptor
+	networkDescSlice := payload[10 : 10+networkDescLen]
+	payload = payload[10+networkDescLen:]
+	networkDescReader := bytes.NewReader(networkDescSlice)
+	for {
+		tagID, tagContent, err := extractDescriptor(networkDescReader)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return nil, err
+			}
+		}
+		switch tagID {
+		case NetworkNameDescTagID:
+			name, err := b24.DecodeString(tagContent)
+			if err != nil {
+				return nil, err
+			}
+			frame.NetworkName = name
+		case ServiceListDescTagID:
+			for len(tagContent) > 0 {
+				frame.ServiceList[binary.BigEndian.Uint16(tagContent[0:2])] = ServiceType(tagContent[2])
+				tagContent = tagContent[3:]
+			}
+		default:
+			log.Printf("NIT Network tagID: %x, content: %v", tagID, tagContent)
+		}
+	}
+	tsLoopLen := binary.BigEndian.Uint16(payload[0:2]) & 0xfff
+	tsPayload := payload[2 : 2+tsLoopLen]
+	for len(tsPayload) > 0 {
+		entry := NITTransportEntry{}
+		entry.TransportStreamId = binary.BigEndian.Uint16(tsPayload[0:2])
+		entry.OriginalNetworkId = binary.BigEndian.Uint16(tsPayload[2:4])
+		tsDescLen := binary.BigEndian.Uint16(tsPayload[4:6]) & 0xfff
+		tsDescSlice := tsPayload[6 : 6+tsDescLen]
+		tsPayload = tsPayload[6+tsDescLen:]
+		tsDescReader := bytes.NewReader(tsDescSlice)
+		tsServiceCount := 0
+		for {
+			tagID, tagContent, err := extractDescriptor(tsDescReader)
+			if err != nil {
+				if err == io.EOF {
+					break
+				} else {
+					return nil, err
+				}
+			}
+			switch tagID {
+			case NetworkNameDescTagID:
+				name, err := b24.DecodeString(tagContent)
+				if err != nil {
+					return nil, err
+				}
+				entry.NetworkName = name
+			case ServiceDescTagID:
+				if tsServiceCount > 0 {
+					log.Fatalf("service desc has shown twice")
+				}
+				tsServiceCount++
+				entry.Service = ServiceDescriptor{}
+				entry.Service.ServiceType = ServiceType(tagContent[0])
+				providerNameLen := tagContent[1]
+				entry.Service.ServiceProviderName, err = b24.DecodeString(tagContent[2 : 2+providerNameLen])
+				if err != nil {
+					return nil, err
+				}
+				tagContent = tagContent[2+providerNameLen:]
+				nameLen := tagContent[0]
+				entry.Service.ServiceName, err = b24.DecodeString(tagContent[1 : 1+nameLen])
+				if err != nil {
+					return nil, err
+				}
+			default:
+				log.Printf("NIT Network tagID: %x, content: %v", tagID, tagContent)
+			}
+		}
+		frame.TransportStreams = append(frame.TransportStreams, entry)
+	}
+	return &frame, nil
 }
 
 func parsePAT(payload []byte, d *Decoder) (Frame, error) {
@@ -219,114 +259,16 @@ func parseDuration(raw []byte) time.Duration {
 	return time.Duration(raw[0])*time.Hour + time.Duration(raw[1])*time.Minute + time.Duration(raw[2])*time.Second
 }
 
-func parseEITEntry(entryPayload []byte) (*EITFrameEntry, int, error) {
-	entry := EITFrameEntry{}
-	entry.EventID = binary.BigEndian.Uint16(entryPayload[0:2])
-	entry.StartTime = parseMjd(entryPayload[2:7])
-	entry.Duration = parseDuration(entryPayload[7:10])
-	entry.RunningState = SDTRunningState(entryPayload[10] >> 5)
-	entry.FreeCA = entryPayload[10]&0x10 == 0x10
-	entryLen := int(binary.BigEndian.Uint16(entryPayload[10:12]) & 0xfff)
-	fromFirstEntry := entryPayload[12 : 12+entryLen]
-	entryReader := bytes.NewReader(fromFirstEntry)
-	for {
-		tagID, tagContent, err := decodeEventEntry(entryReader)
-		if err != nil {
-			if err == io.EOF {
-				return &entry, 12 + entryLen, nil
-			} else {
-				return nil, 12 + entryLen, err
-			}
-		}
-		switch tagID {
-		case ShortEventDescTagID:
-			entry.ShortDescriptor.LangCode = string(tagContent[0:3])
-			entry.ShortDescriptor.EventName, err = b24.DecodeString(tagContent[4 : 4+tagContent[3]])
-			if err != nil {
-				return nil, 12 + entryLen, err
-			}
-			entry.ShortDescriptor.Text, err = b24.DecodeString(tagContent[4+tagContent[3]+1:])
-			if err != nil {
-				return nil, 12 + entryLen, err
-			}
-		case ContentDescTagID:
-			genreCount := len(tagContent) / 2
-			entries := make([]EITContentDescriptorEntry, genreCount)
-			for i := 0; i < genreCount; i++ {
-				entries[i] = EITContentDescriptorEntry{SubGenre(tagContent[2*i]), tagContent[2*i+1]}
-			}
-		case AudioDescTagID:
-			if tagContent[1]&AudioCompModeMask == AudioCompDualMonoModeID {
-				entry.DualMono = true
-			}
-		case ExtendedEventDescTagID:
-			extDesc := EITExtendedEventDescriptor{}
-			extDesc.LangCode = string(tagContent[1:4])
-			itemsLen := tagContent[4]
-			itemRaw := tagContent[5 : 5+itemsLen]
-			extDesc.Entries = make([]EITExtendedEventEntry, 0)
-			for len(itemRaw) != 0 {
-				nameLen := itemRaw[0]
-				name, err := b24.DecodeString(itemRaw[1 : 1+nameLen])
-				if err != nil {
-					return nil, 12 + entryLen, err
-				}
-				descLen := itemRaw[1+nameLen]
-				desc, err := b24.DecodeString(itemRaw[2+nameLen : 2+nameLen+descLen])
-				if err != nil {
-					return nil, 12 + entryLen, err
-				}
-				extDesc.Entries = append(extDesc.Entries, EITExtendedEventEntry{name, desc})
-				itemRaw = itemRaw[2+nameLen+descLen:]
-			}
-			descLen := tagContent[5+itemsLen]
-			extDesc.Description, err = b24.DecodeString(tagContent[6+itemsLen : 6+itemsLen+descLen])
-			if err != nil {
-				return nil, 12 + entryLen, err
-			}
-			if err != nil {
-				return nil, 12 + entryLen, err
-			}
-			if entry.ExtendedDescriptor == nil {
-				entry.ExtendedDescriptor = []EITExtendedEventDescriptor{extDesc}
-			} else {
-				entry.ExtendedDescriptor = append(entry.ExtendedDescriptor, extDesc)
-			}
-		default:
-			log.Printf("tag %d %v", tagID, tagContent)
-		}
-	}
-}
-
-func parseEIT(entryPayload []byte, _ *Decoder) (Frame, error) {
-	if entryPayload[1]&0xf0 != 0xf0 {
-		return nil, errors.New("illegal EIT frame")
-	}
-	eitFrame := EITFrame{}
-	eitFrame.TableID = entryPayload[0]
-	eitFrame.Entries = make([]EITFrameEntry, 0)
-	remaining := entryPayload[14 : len(entryPayload)-4]
-	for len(remaining) > 0 {
-		entry, parsedLen, err := parseEITEntry(remaining)
-		if err != nil {
-			return nil, err
-		}
-		eitFrame.Entries = append(eitFrame.Entries, *entry)
-		remaining = remaining[parsedLen:]
-	}
-	return &eitFrame, nil
-}
-
-func decodeEventEntry(entryReader io.Reader) (uint8, []byte, error) {
+func extractDescriptor(descriptorReader io.Reader) (uint8, []byte, error) {
 	buf := make([]byte, 2)
-	_, err := entryReader.Read(buf)
+	_, err := descriptorReader.Read(buf)
 	if err != nil {
 		return 0, nil, err
 	}
 	tagID := buf[0]
 	tagLen := buf[1]
 	buf = make([]byte, int(tagLen))
-	_, err = entryReader.Read(buf)
+	_, err = descriptorReader.Read(buf)
 	return tagID, buf, err
 }
 
