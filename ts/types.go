@@ -6,6 +6,17 @@ type EITShortEventDescriptor struct {
 	Text      string
 }
 
+type EITExtendedEventEntry struct {
+	Name        string
+	Description string
+}
+
+type EITExtendedEventDescriptor struct {
+	LangCode    string
+	Entries     []EITExtendedEventEntry
+	Description string
+}
+
 type EITContentDescriptorEntry struct {
 	SubGenre   SubGenre
 	UserDefine uint8
