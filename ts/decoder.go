@@ -206,7 +206,7 @@ func parseMjd(raw []byte) time.Time {
 	min := raw[3]
 	s := raw[4]
 	loc, _ := time.LoadLocation("Asia/Tokyo")
-	return time.Date(y, time.Month(m), d, int(h), int(min), int(s), 0, loc)
+	return time.Date(y+1900, time.Month(m), d, int(h), int(min), int(s), 0, loc)
 }
 
 func parseDuration(raw []byte) time.Duration {
@@ -225,7 +225,6 @@ func parseEITEntry(entryPayload []byte) (*EITFrameEntry, int, error) {
 	entryReader := bytes.NewReader(fromFirstEntry)
 	for {
 		tagID, tagContent, err := decodeEventEntry(entryReader)
-		log.Println("EIT Descriptor", tagID, tagContent)
 		if err != nil {
 			if err == io.EOF {
 				return &entry, 12 + entryLen, nil
