@@ -94,10 +94,10 @@ func NewDecoder(reader io.Reader) *Decoder {
 }
 
 func (d *Decoder) ParseNext() (Frame, error) {
-	buf, err := d.readNextTSPacket()
 	var PID uint16
 	isPUSI := false
 	for {
+		buf, err := d.readNextTSPacket()
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,6 @@ func (d *Decoder) ParseNext() (Frame, error) {
 			pidBuf, pidBufOk := d.pidBuffer[PID]
 			if !pidBufOk && !isPUSI {
 				// ignore
-				buf, err = d.readNextTSPacket()
 				continue
 			}
 			payload := getPayload(buf)
