@@ -158,7 +158,6 @@ func (d *Decoder) ParseNext() (Frame, error) {
 				delete(d.pidBuffer, PID)
 			}
 		}
-		buf, err = d.readNextTSPacket()
 	}
 }
 
@@ -196,7 +195,7 @@ func parsePAT(payload []byte, d *Decoder) (Frame, error) {
 }
 
 func parseMjd(raw []byte) time.Time {
-	if binary.BigEndian.Uint64(raw) == 0xffffffffff {
+	if raw[0] == 0xff && raw[1] == 0xff && raw[2] == 0xff && raw[3] == 0xff && raw[4] == 0xff {
 		return time.UnixMicro(0) // N/A
 	}
 	mjd := binary.BigEndian.Uint16(raw[0:2])
