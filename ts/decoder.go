@@ -44,7 +44,7 @@ func (f *GeneralFrame) GetType() string {
 }
 
 func NewDecoder(reader io.Reader) *Decoder {
-	return &Decoder{reader, nil, make(map[uint16]*PMTFrame), 0, make(map[uint16]*frameBuffer), map[uint16]func([]byte, *Decoder) (Frame, error){0x0: parsePAT, 0x12: parseEIT}}
+	return &Decoder{reader, nil, make(map[uint16]*PMTFrame), 0, make(map[uint16]*frameBuffer), map[uint16]func([]byte, *Decoder) (Frame, error){0x0: parsePAT, 0x10: parseNIT, 0x12: parseEIT}}
 }
 
 func (d *Decoder) ParseNext() (Frame, error) {
