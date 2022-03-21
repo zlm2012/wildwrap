@@ -28,3 +28,4 @@ type EITContentDescriptor struct {
 
 type Genre uint8
 type SubGenre uint8
+type SDTRunningState uint8

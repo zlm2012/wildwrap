@@ -7,6 +7,8 @@ import (
 	"github.com/zlm2012/wildwrap/b24"
 	"io"
 	"log"
+	"math"
+	"time"
 )
 
 type PATFrame struct {
@@ -74,7 +76,16 @@ func (f *GeneralFrame) GetType() string {
 }
 
 type EITFrame struct {
-	TableID            uint8
+	TableID uint8
+	Entries []EITFrameEntry
+}
+
+type EITFrameEntry struct {
+	EventID            uint16
+	StartTime          time.Time
+	Duration           time.Duration
+	RunningState       SDTRunningState
+	FreeCA             bool
 	DualMono           bool
 	Contents           EITContentDescriptor
 	ShortDescriptor    EITShortEventDescriptor
@@ -131,11 +142,10 @@ func (d *Decoder) ParseNext() (Frame, error) {
 
 					// Parse
 					parseFunc, _ := d.pidToParse[PID]
-					pidBuf.buf = append(pidBuf.buf, payload[1:1+payloadOffset]...)
-					if len(pidBuf.buf) != int(pidBuf.sectionLen)+3 {
-						log.Printf("pid buf len is not equal to section len: %d vs %d", len(pidBuf.buf), pidBuf.sectionLen+3)
+					if payloadOffset != 0 {
+						pidBuf.buf = append(pidBuf.buf, payload[1:1+payloadOffset]...)
 					}
-					return parseFunc(pidBuf.buf, d)
+					return parseFunc(pidBuf.buf[0:pidBuf.sectionLen], d)
 				} else {
 					pidBuf.lastCounter = counter
 					pidBuf.buf = append(pidBuf.buf, payload...)
@@ -182,58 +192,65 @@ func parsePAT(payload []byte, d *Decoder) (Frame, error) {
 	return &frame, nil
 }
 
-func (d *Decoder) ReadNextCurrentStreamEITFrame() (*EITFrame, error) {
-	entryPayload, err := d.SeekNextEITFrame(EITPID, EITCurrentStreamTID)
-	if err != nil {
-		return nil, err
+func parseMjd(raw []byte) time.Time {
+	if binary.BigEndian.Uint64(raw) == 0xffffffffff {
+		return time.UnixMicro(0) // N/A
 	}
-	f, e := parseEIT(entryPayload, nil)
-	return f.(*EITFrame), e
+	mjd := binary.BigEndian.Uint16(raw[0:2])
+	y := int((float64(mjd) - 15078.2) / 365.25)
+	m := int((float64(mjd) - 14956.1 - math.Floor(float64(y)*365.25)) / 30.6001)
+	d := int(mjd) - 14956 - int(math.Floor(float64(y)*365.25)) - int(math.Floor(float64(m)*30.6001))
+	h := raw[2]
+	min := raw[3]
+	s := raw[4]
+	loc, _ := time.LoadLocation("Asia/Tokyo")
+	return time.Date(y, time.Month(m), d, int(h), int(min), int(s), 0, loc)
 }
 
-func parseEIT(entryPayload []byte, _ *Decoder) (Frame, error) {
-	if entryPayload[1]&0xf0 != 0xf0 {
-		return nil, errors.New("illegal EIT frame")
-	}
-	firstEntryLen := int(binary.BigEndian.Uint16(entryPayload[10:12]) & 0xfff)
-	fromFirstEntry := entryPayload[12 : 12+firstEntryLen]
+func parseDuration(raw []byte) time.Duration {
+	return time.Duration(raw[0])*time.Hour + time.Duration(raw[1])*time.Minute + time.Duration(raw[2])*time.Second
+}
+
+func parseEITEntry(entryPayload []byte) (*EITFrameEntry, int, error) {
+	entry := EITFrameEntry{}
+	entry.EventID = binary.BigEndian.Uint16(entryPayload[0:2])
+	entry.StartTime = parseMjd(entryPayload[2:7])
+	entry.Duration = parseDuration(entryPayload[7:10])
+	entry.RunningState = SDTRunningState(entryPayload[10] >> 5)
+	entry.FreeCA = entryPayload[10]&0x10 == 0x10
+	entryLen := int(binary.BigEndian.Uint16(entryPayload[10:12]) & 0xfff)
+	fromFirstEntry := entryPayload[12 : 12+entryLen]
 	entryReader := bytes.NewReader(fromFirstEntry)
-	genreRead := false
-	audioRead := false
-	eitFrame := EITFrame{}
-	eitFrame.TableID = entryPayload[0]
 	for {
 		tagID, tagContent, err := decodeEventEntry(entryReader)
 		log.Println("EIT Descriptor", tagID, tagContent)
 		if err != nil {
 			if err == io.EOF {
-				return nil, nil
+				return &entry, 12 + entryLen, nil
 			} else {
-				return nil, err
+				return nil, 12 + entryLen, err
 			}
 		}
 		switch tagID {
 		case ShortEventDescTagID:
-			eitFrame.ShortDescriptor.LangCode = string(tagContent[0:3])
-			eitFrame.ShortDescriptor.EventName, err = b24.DecodeString(tagContent[4 : 4+tagContent[3]])
+			entry.ShortDescriptor.LangCode = string(tagContent[0:3])
+			entry.ShortDescriptor.EventName, err = b24.DecodeString(tagContent[4 : 4+tagContent[3]])
 			if err != nil {
-				return nil, err
+				return nil, 12 + entryLen, err
 			}
-			eitFrame.ShortDescriptor.Text, err = b24.DecodeString(tagContent[4+tagContent[3]+1:])
+			entry.ShortDescriptor.Text, err = b24.DecodeString(tagContent[4+tagContent[3]+1:])
 			if err != nil {
-				return nil, err
+				return nil, 12 + entryLen, err
 			}
 		case ContentDescTagID:
-			genreRead = true
 			genreCount := len(tagContent) / 2
 			entries := make([]EITContentDescriptorEntry, genreCount)
 			for i := 0; i < genreCount; i++ {
 				entries[i] = EITContentDescriptorEntry{SubGenre(tagContent[2*i]), tagContent[2*i+1]}
 			}
 		case AudioDescTagID:
-			audioRead = true
 			if tagContent[1]&AudioCompModeMask == AudioCompDualMonoModeID {
-				eitFrame.DualMono = true
+				entry.DualMono = true
 			}
 		case ExtendedEventDescTagID:
 			extDesc := EITExtendedEventDescriptor{}
@@ -245,12 +262,12 @@ func parseEIT(entryPayload []byte, _ *Decoder) (Frame, error) {
 				nameLen := itemRaw[0]
 				name, err := b24.DecodeString(itemRaw[1 : 1+nameLen])
 				if err != nil {
-					return nil, err
+					return nil, 12 + entryLen, err
 				}
 				descLen := itemRaw[1+nameLen]
 				desc, err := b24.DecodeString(itemRaw[2+nameLen : 2+nameLen+descLen])
 				if err != nil {
-					return nil, err
+					return nil, 12 + entryLen, err
 				}
 				extDesc.Entries = append(extDesc.Entries, EITExtendedEventEntry{name, desc})
 				itemRaw = itemRaw[2+nameLen+descLen:]
@@ -258,22 +275,39 @@ func parseEIT(entryPayload []byte, _ *Decoder) (Frame, error) {
 			descLen := tagContent[5+itemsLen]
 			extDesc.Description, err = b24.DecodeString(tagContent[6+itemsLen : 6+itemsLen+descLen])
 			if err != nil {
-				return nil, err
+				return nil, 12 + entryLen, err
 			}
 			if err != nil {
-				return nil, err
+				return nil, 12 + entryLen, err
 			}
-			if eitFrame.ExtendedDescriptor == nil {
-				eitFrame.ExtendedDescriptor = []EITExtendedEventDescriptor{extDesc}
+			if entry.ExtendedDescriptor == nil {
+				entry.ExtendedDescriptor = []EITExtendedEventDescriptor{extDesc}
 			} else {
-				eitFrame.ExtendedDescriptor = append(eitFrame.ExtendedDescriptor, extDesc)
+				entry.ExtendedDescriptor = append(entry.ExtendedDescriptor, extDesc)
 			}
-		}
-
-		if genreRead && audioRead {
-			return &eitFrame, nil
+		default:
+			log.Printf("tag %d %v", tagID, tagContent)
 		}
 	}
+}
+
+func parseEIT(entryPayload []byte, _ *Decoder) (Frame, error) {
+	if entryPayload[1]&0xf0 != 0xf0 {
+		return nil, errors.New("illegal EIT frame")
+	}
+	eitFrame := EITFrame{}
+	eitFrame.TableID = entryPayload[0]
+	eitFrame.Entries = make([]EITFrameEntry, 0)
+	remaining := entryPayload[14 : len(entryPayload)-4]
+	for len(remaining) > 0 {
+		entry, parsedLen, err := parseEITEntry(remaining)
+		if err != nil {
+			return nil, err
+		}
+		eitFrame.Entries = append(eitFrame.Entries, *entry)
+		remaining = remaining[parsedLen:]
+	}
+	return &eitFrame, nil
 }
 
 func decodeEventEntry(entryReader io.Reader) (uint8, []byte, error) {

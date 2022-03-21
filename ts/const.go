@@ -35,3 +35,11 @@ const (
 	AudioCompModeMask       uint8 = 0x1f
 	AudioCompDualMonoModeID uint8 = 0b00010
 )
+
+const (
+	RSUndefined SDTRunningState = iota
+	RSNotRunning
+	RSStartSoon
+	RSStopped
+	RSRunning
+)
