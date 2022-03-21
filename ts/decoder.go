@@ -199,9 +199,15 @@ func parseMjd(raw []byte) time.Time {
 		return time.UnixMicro(0) // N/A
 	}
 	mjd := binary.BigEndian.Uint16(raw[0:2])
-	y := int((float64(mjd) - 15078.2) / 365.25)
-	m := int((float64(mjd) - 14956.1 - math.Floor(float64(y)*365.25)) / 30.6001)
-	d := int(mjd) - 14956 - int(math.Floor(float64(y)*365.25)) - int(math.Floor(float64(m)*30.6001))
+	yp := int((float64(mjd) - 15078.2) / 365.25)
+	mp := int((float64(mjd) - 14956.1 - math.Floor(float64(yp)*365.25)) / 30.6001)
+	d := int(mjd) - 14956 - int(math.Floor(float64(yp)*365.25)) - int(math.Floor(float64(mp)*30.6001))
+	k := 0
+	if mp == 14 || mp == 15 {
+		k = 1
+	}
+	y := yp + k
+	m := mp - 1 - k*12
 	h := raw[2]
 	min := raw[3]
 	s := raw[4]
