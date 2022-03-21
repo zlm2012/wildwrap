@@ -173,6 +173,7 @@ func parsePAT(payload []byte, d *Decoder) (Frame, error) {
 	frame.CurrentNext = payload[5]&1 == 1
 	frame.Section = payload[6]
 	frame.LastSection = payload[7]
+	frame.SidPidMap = make(map[uint16]uint16)
 	payload = payload[8 : len(payload)-4]
 	if len(payload)%4 != 0 {
 		log.Fatalf("unexpected payload len after crc excluded: %d", len(payload))
