@@ -129,16 +129,18 @@ func (d *Decoder) ParseNext() (Frame, error) {
 			payload := getPayload(buf)
 			if !pidBufOk && isPUSI {
 				payloadOffset := payload[0]
-				sectionLen := binary.BigEndian.Uint16(payload[2+payloadOffset:4+payloadOffset]) & 0xfff
-				d.pidBuffer[PID] = &FrameBuffer{payload[1+payloadOffset:], counter, sectionLen}
+				newPayload := payload[1+payloadOffset:]
+				sectionLen := binary.BigEndian.Uint16(newPayload[1:3])&0xfff + 3
+				d.pidBuffer[PID] = &FrameBuffer{newPayload, counter, sectionLen}
 			} else if pidBuf.lastCounter == counter {
 				continue
 			} else if (pidBuf.lastCounter == 0xf && counter == 0) || pidBuf.lastCounter+1 == counter {
 				if isPUSI {
 					// insert buf
 					payloadOffset := payload[0]
-					sectionLen := binary.BigEndian.Uint16(payload[2+payloadOffset:4+payloadOffset]) & 0xfff
-					d.pidBuffer[PID] = &FrameBuffer{payload[1+payloadOffset:], counter, sectionLen}
+					newPayload := payload[1+payloadOffset:]
+					sectionLen := binary.BigEndian.Uint16(newPayload[1:3])&0xfff + 3
+					d.pidBuffer[PID] = &FrameBuffer{newPayload, counter, sectionLen}
 
 					// Parse
 					parseFunc, _ := d.pidToParse[PID]
