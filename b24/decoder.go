@@ -127,6 +127,9 @@ func (s *decodeState) changeState(bytes []byte) (int, bool, error) {
 	ss := false
 	switch bytes[0] {
 	case 0x1B:
+		if len(bytes) == 1 { // ignore
+			return 0, false, nil
+		}
 		seqLen = 1
 		switch bytes[1] {
 		case 0x24:
@@ -174,6 +177,9 @@ func (s *decodeState) changeState(bytes []byte) (int, bool, error) {
 			}
 		case 0x28:
 			// G0 1-byte set
+			if len(bytes) == 1 { // ignore
+				return 0, false, nil
+			}
 			bcs, additionalSeqLen, err := getCharset1Byte(bytes[2:])
 			if err != nil {
 				return 0, false, err
@@ -182,6 +188,9 @@ func (s *decodeState) changeState(bytes []byte) (int, bool, error) {
 			s.G0 = bcs
 		case 0x29:
 			// G1 1-byte set
+			if len(bytes) == 1 { // ignore
+				return 0, false, nil
+			}
 			bcs, additionalSeqLen, err := getCharset1Byte(bytes[2:])
 			if err != nil {
 				return 0, false, err
@@ -190,6 +199,9 @@ func (s *decodeState) changeState(bytes []byte) (int, bool, error) {
 			s.G1 = bcs
 		case 0x2A:
 			// G2 1-byte set
+			if len(bytes) == 1 { // ignore
+				return 0, false, nil
+			}
 			bcs, additionalSeqLen, err := getCharset1Byte(bytes[2:])
 			if err != nil {
 				return 0, false, err
@@ -198,6 +210,9 @@ func (s *decodeState) changeState(bytes []byte) (int, bool, error) {
 			s.G2 = bcs
 		case 0x2B:
 			// G3 1-byte set
+			if len(bytes) == 1 { // ignore
+				return 0, false, nil
+			}
 			bcs, additionalSeqLen, err := getCharset1Byte(bytes[2:])
 			if err != nil {
 				return 0, false, err
