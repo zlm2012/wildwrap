@@ -137,6 +137,8 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 				return nil, err
 			}
 			frame.NetworkName = name
+		case 0xFE:
+			// ignore
 		default:
 			log.Printf("NIT Network tagID: %x, content: %v", tagID, tagContent)
 		}
@@ -208,7 +210,6 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 			case 0xFD:
 				fallthrough
 			case 0xFE:
-				fallthrough
 				// ignore
 			default:
 				log.Printf("NIT Entry tagID: %x, content: %v", tagID, tagContent)
