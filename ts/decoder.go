@@ -111,7 +111,6 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 
 	frame := NITFrame{}
 	frame.TransportStreams = make([]NITTransportEntry, 0)
-	frame.ServiceList = make(map[uint16]ServiceType)
 	frame.NetworkID = binary.BigEndian.Uint16(payload[3:5])
 	frame.CurrentNext = payload[5]&1 == 1
 	frame.Section = payload[6]
@@ -138,18 +137,6 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 				return nil, err
 			}
 			frame.NetworkName = name
-		case ServiceListDescTagID:
-			for len(tagContent) > 0 {
-				frame.ServiceList[binary.BigEndian.Uint16(tagContent[0:2])] = ServiceType(tagContent[2])
-				tagContent = tagContent[3:]
-			}
-		case TSInfoDescTagID:
-			frame.TSInfo.RemoteControlKeyId = tagContent[0]
-			nameLen := tagContent[1] >> 2
-			frame.TSInfo.TSName, err = b24.DecodeString(tagContent[2 : 2+nameLen])
-			if err != nil {
-				return nil, err
-			}
 		default:
 			log.Printf("NIT Network tagID: %x, content: %v", tagID, tagContent)
 		}
@@ -202,6 +189,13 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 				tagContent = tagContent[2+providerNameLen:]
 				nameLen := tagContent[0]
 				entry.Service.ServiceName, err = b24.DecodeString(tagContent[1 : 1+nameLen])
+				if err != nil {
+					return nil, err
+				}
+			case TSInfoDescTagID:
+				entry.TSInfo.RemoteControlKeyId = tagContent[0]
+				nameLen := tagContent[1] >> 2
+				entry.TSInfo.TSName, err = b24.DecodeString(tagContent[2 : 2+nameLen])
 				if err != nil {
 					return nil, err
 				}

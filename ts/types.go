@@ -69,6 +69,7 @@ type NITTransportEntry struct {
 	NetworkName       string
 	Service           ServiceDescriptor
 	ServiceList       map[uint16]ServiceType
+	TSInfo            TSInfo
 }
 
 type NITFrame struct {
@@ -77,9 +78,7 @@ type NITFrame struct {
 	Section          uint8
 	LastSection      uint8
 	NetworkName      string
-	ServiceList      map[uint16]ServiceType
 	TransportStreams []NITTransportEntry
-	TSInfo           TSInfo
 }
 
 func (f *NITFrame) IsParsed() bool {
