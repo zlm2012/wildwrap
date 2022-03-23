@@ -153,6 +153,7 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 		entry := NITTransportEntry{}
 		entry.TransportStreamId = binary.BigEndian.Uint16(tsPayload[0:2])
 		entry.OriginalNetworkId = binary.BigEndian.Uint16(tsPayload[2:4])
+		entry.ServiceList = make(map[uint16]ServiceType)
 		tsDescLen := binary.BigEndian.Uint16(tsPayload[4:6]) & 0xfff
 		tsDescSlice := tsPayload[6 : 6+tsDescLen]
 		tsPayload = tsPayload[6+tsDescLen:]
@@ -174,6 +175,11 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 					return nil, err
 				}
 				entry.NetworkName = name
+			case ServiceListDescTagID:
+				for len(tagContent) > 0 {
+					entry.ServiceList[binary.BigEndian.Uint16(tagContent[0:2])] = ServiceType(tagContent[2])
+					tagContent = tagContent[3:]
+				}
 			case ServiceDescTagID:
 				if tsServiceCount > 0 {
 					log.Fatalf("service desc has shown twice")

@@ -63,6 +63,7 @@ type NITTransportEntry struct {
 	OriginalNetworkId uint16
 	NetworkName       string
 	Service           ServiceDescriptor
+	ServiceList       map[uint16]ServiceType
 }
 
 type NITFrame struct {

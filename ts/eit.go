@@ -104,9 +104,6 @@ func parseEITEntry(entryPayload []byte) (*EITFrameEntry, int, error) {
 			if err != nil {
 				return nil, 12 + entryLen, err
 			}
-			if err != nil {
-				return nil, 12 + entryLen, err
-			}
 			if entry.ExtendedDescriptor == nil {
 				entry.ExtendedDescriptor = []EITExtendedEventDescriptor{extDesc}
 			} else {
