@@ -22,12 +22,14 @@ const (
 	NetworkNameDescTagID   uint8 = 0x40
 	ServiceListDescTagID   uint8 = 0x41
 	StuffDescTagID         uint8 = 0x42
+	SatelliteDescTagID     uint8 = 0x43
 	ServiceDescTagID       uint8 = 0x48
 	LinkDescTagID          uint8 = 0x4a
 	ShortEventDescTagID    uint8 = 0x4d
 	ExtendedEventDescTagID uint8 = 0x4e
 	ContentDescTagID       uint8 = 0x54
 	AudioDescTagID         uint8 = 0xc4
+	TSInfoDescTagID        uint8 = 0xCD
 	TimeshiftDescTagID
 	ComponentDescTagID
 	ParentRateDescTagID

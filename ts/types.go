@@ -58,6 +58,11 @@ func (f *PMTFrame) GetType() string {
 	return "PMT"
 }
 
+type TSInfo struct {
+	RemoteControlKeyId uint8
+	TSName             string
+}
+
 type NITTransportEntry struct {
 	TransportStreamId uint16
 	OriginalNetworkId uint16
@@ -74,6 +79,7 @@ type NITFrame struct {
 	NetworkName      string
 	ServiceList      map[uint16]ServiceType
 	TransportStreams []NITTransportEntry
+	TSInfo           TSInfo
 }
 
 func (f *NITFrame) IsParsed() bool {
