@@ -245,10 +245,64 @@ func parsePAT(payload []byte, d *Decoder) (Frame, error) {
 			frame.NetworkPID = progPid
 		} else {
 			frame.SidPidMap[progNum] = progPid
+			if frame.CurrentNext {
+				d.pidToParse[progPid] = parsePMT
+			}
 		}
 	}
 	if frame.CurrentNext {
 		d.lastPat = &frame
+	}
+	return &frame, nil
+}
+
+func parsePMT(payload []byte, d *Decoder) (Frame, error) {
+	if payload[0] != 2 || payload[1]&0xf0 != 0b10110000 {
+		return nil, errors.New("illegal PMT frame")
+	}
+	frame := PMTFrame{}
+	frame.StreamList = make([]ESInfo, 0)
+	frame.ServiceID = binary.BigEndian.Uint16(payload[3:5])
+	frame.Version = payload[5] & 0b111110 >> 1
+	frame.CurrentNext = payload[5]&1 == 1
+	frame.Session = payload[6]
+	frame.LastSession = payload[7]
+	frame.PcrPID = binary.BigEndian.Uint16(payload[8:10]) & 0x1fff
+	programInfoLen := binary.BigEndian.Uint16(payload[10:12]) & 0xfff
+	programInfoSlice := payload[12 : 12+programInfoLen]
+	payload = payload[12+programInfoLen : len(payload)-4]
+	programInfoReader := bytes.NewReader(programInfoSlice)
+	for {
+		tagID, tagContent, err := extractDescriptor(programInfoReader)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return nil, err
+			}
+		}
+		log.Printf("PMT ProgInfo %x: %v", tagID, tagContent)
+	}
+	for len(payload) > 0 {
+		esInfo := ESInfo{}
+		esInfo.StreamId = payload[0]
+		esInfo.PID = binary.BigEndian.Uint16(payload[1:3]) & 0x1fff
+		esInfoLen := binary.BigEndian.Uint16(payload[3:5]) & 0xfff
+		esInfoDescSlice := payload[5 : 5+esInfoLen]
+		payload = payload[5+esInfoLen:]
+		esInfoDescReader := bytes.NewReader(esInfoDescSlice)
+		for {
+			tagID, tagContent, err := extractDescriptor(esInfoDescReader)
+			if err != nil {
+				if err == io.EOF {
+					break
+				} else {
+					return nil, err
+				}
+			}
+			log.Printf("PMT ESInfo %x: %v", tagID, tagContent)
+		}
+		frame.StreamList = append(frame.StreamList, esInfo)
 	}
 	return &frame, nil
 }

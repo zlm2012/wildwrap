@@ -45,9 +45,19 @@ func (f *PATFrame) GetType() string {
 	return "PAT"
 }
 
+type ESInfo struct {
+	StreamId uint8
+	PID      uint16
+}
+
 type PMTFrame struct {
-	PcrPID        uint16
-	StreamPidList []uint16
+	ServiceID   uint16
+	Version     uint8
+	CurrentNext bool
+	Session     uint8
+	LastSession uint8
+	PcrPID      uint16
+	StreamList  []ESInfo
 }
 
 func (f *PMTFrame) IsParsed() bool {
