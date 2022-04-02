@@ -1,31 +1,5 @@
 package ts
 
-type EITShortEventDescriptor struct {
-	LangCode  string
-	EventName string
-	Text      string
-}
-
-type EITExtendedEventEntry struct {
-	Name        string
-	Description string
-}
-
-type EITExtendedEventDescriptor struct {
-	LangCode    string
-	Entries     []EITExtendedEventEntry
-	Description string
-}
-
-type EITContentDescriptorEntry struct {
-	SubGenre   SubGenre
-	UserDefine uint8
-}
-
-type EITContentDescriptor struct {
-	Entries []EITContentDescriptorEntry
-}
-
 type PATFrame struct {
 	TransportStreamID []byte
 	Version           uint8
@@ -77,13 +51,13 @@ type NITTransportEntry struct {
 	TransportStreamId uint16
 	OriginalNetworkId uint16
 	NetworkName       string
-	Service           ServiceDescriptor
 	ServiceList       map[uint16]ServiceType
 	TSInfo            TSInfo
 }
 
 type NITFrame struct {
 	NetworkID        uint16
+	Version          uint8
 	CurrentNext      bool
 	Section          uint8
 	LastSection      uint8
@@ -97,6 +71,41 @@ func (f *NITFrame) IsParsed() bool {
 
 func (f *NITFrame) GetType() string {
 	return "NIT"
+}
+
+type LogoTransmissionDescriptor struct {
+	LogoTransmissionType uint8
+	LogoId               uint16
+	LogoVersion          uint16
+	DownloadDataId       uint16
+	LogoStr              string
+}
+
+type SDTFrameEntry struct {
+	ServiceID    uint16
+	EITFlags     uint8
+	RunningState SDTRunningState
+	Scramble     bool
+	Service      ServiceDescriptor
+	Logo         LogoTransmissionDescriptor
+}
+
+type SDTFrame struct {
+	TransportStreamID uint16
+	Version           uint8
+	CurrentNext       bool
+	Section           uint8
+	LastSection       uint8
+	OriginalNetworkID uint16
+	Entries           []SDTFrameEntry
+}
+
+func (f *SDTFrame) IsParsed() bool {
+	return true
+}
+
+func (f *SDTFrame) GetType() string {
+	return "SDT"
 }
 
 type ServiceDescriptor struct {

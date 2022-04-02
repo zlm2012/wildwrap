@@ -44,7 +44,7 @@ func (f *GeneralFrame) GetType() string {
 }
 
 func NewDecoder(reader io.Reader) *Decoder {
-	return &Decoder{reader, nil, make(map[uint16]*PMTFrame), 0, make(map[uint16]*frameBuffer), map[uint16]func([]byte, *Decoder) (Frame, error){0x0: parsePAT, 0x10: parseNIT, 0x12: parseEIT}}
+	return &Decoder{reader, nil, make(map[uint16]*PMTFrame), 0, make(map[uint16]*frameBuffer), map[uint16]func([]byte, *Decoder) (Frame, error){0x0: parsePAT, 0x10: parseNIT, 0x11: parseSDT, 0x12: parseEIT}}
 }
 
 func (d *Decoder) ParseNext() (Frame, error) {
@@ -112,6 +112,7 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 	frame := NITFrame{}
 	frame.TransportStreams = make([]NITTransportEntry, 0)
 	frame.NetworkID = binary.BigEndian.Uint16(payload[3:5])
+	frame.Version = payload[5] & 0b111110 >> 1
 	frame.CurrentNext = payload[5]&1 == 1
 	frame.Section = payload[6]
 	frame.LastSection = payload[7]
@@ -154,7 +155,6 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 		tsDescSlice := tsPayload[6 : 6+tsDescLen]
 		tsPayload = tsPayload[6+tsDescLen:]
 		tsDescReader := bytes.NewReader(tsDescSlice)
-		tsServiceCount := 0
 		for {
 			tagID, tagContent, err := extractDescriptor(tsDescReader)
 			if err != nil {
@@ -175,24 +175,6 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 				for len(tagContent) > 0 {
 					entry.ServiceList[binary.BigEndian.Uint16(tagContent[0:2])] = ServiceType(tagContent[2])
 					tagContent = tagContent[3:]
-				}
-			case ServiceDescTagID:
-				if tsServiceCount > 0 {
-					log.Fatalf("service desc has shown twice")
-				}
-				tsServiceCount++
-				entry.Service = ServiceDescriptor{}
-				entry.Service.ServiceType = ServiceType(tagContent[0])
-				providerNameLen := tagContent[1]
-				entry.Service.ServiceProviderName, err = b24.DecodeString(tagContent[2 : 2+providerNameLen])
-				if err != nil {
-					return nil, err
-				}
-				tagContent = tagContent[2+providerNameLen:]
-				nameLen := tagContent[0]
-				entry.Service.ServiceName, err = b24.DecodeString(tagContent[1 : 1+nameLen])
-				if err != nil {
-					return nil, err
 				}
 			case TSInfoDescTagID:
 				entry.TSInfo.RemoteControlKeyId = tagContent[0]
@@ -216,6 +198,83 @@ func parseNIT(payload []byte, _ *Decoder) (Frame, error) {
 			}
 		}
 		frame.TransportStreams = append(frame.TransportStreams, entry)
+	}
+	return &frame, nil
+}
+
+func parseSDT(payload []byte, _ *Decoder) (Frame, error) {
+	if (payload[0] != 0x42 && payload[0] != 0x46) || payload[1]&0xf0 != 0xf0 {
+		return nil, errors.New("illegal SDT frame")
+	}
+	frame := SDTFrame{}
+	frame.TransportStreamID = binary.BigEndian.Uint16(payload[3:5])
+	frame.Version = payload[5] & 0b111110 >> 1
+	frame.CurrentNext = payload[5]&1 == 1
+	frame.Section = payload[6]
+	frame.LastSection = payload[7]
+	frame.OriginalNetworkID = binary.BigEndian.Uint16(payload[8:10])
+	frame.Entries = make([]SDTFrameEntry, 0)
+
+	payload = payload[11:]
+	for len(payload) > 0 {
+		entry := SDTFrameEntry{}
+		entry.ServiceID = binary.BigEndian.Uint16(payload[0:2])
+		entry.EITFlags = payload[2]
+		entry.RunningState = SDTRunningState(payload[3] >> 5)
+		entry.Scramble = payload[3]&0x10 == 0x10
+		descLen := binary.BigEndian.Uint16(payload[3:5]) & 0xfff
+		descSlice := payload[10 : 10+descLen]
+		payload = payload[5+descLen:]
+		descReader := bytes.NewReader(descSlice)
+		for {
+			tagID, tagContent, err := extractDescriptor(descReader)
+			if err != nil {
+				if err == io.EOF {
+					break
+				} else {
+					return nil, err
+				}
+			}
+			switch tagID {
+			case ServiceDescTagID:
+				entry.Service = ServiceDescriptor{}
+				entry.Service.ServiceType = ServiceType(tagContent[0])
+				providerNameLen := tagContent[1]
+				entry.Service.ServiceProviderName, err = b24.DecodeString(tagContent[2 : 2+providerNameLen])
+				if err != nil {
+					return nil, err
+				}
+				tagContent = tagContent[2+providerNameLen:]
+				nameLen := tagContent[0]
+				entry.Service.ServiceName, err = b24.DecodeString(tagContent[1 : 1+nameLen])
+				if err != nil {
+					return nil, err
+				}
+			case 0xCF:
+				// Logo
+				entry.Logo.LogoTransmissionType = tagContent[0]
+				switch entry.Logo.LogoTransmissionType {
+				case 0x01:
+					entry.Logo.LogoVersion = binary.BigEndian.Uint16(tagContent[3:5]) & 0xfff
+					entry.Logo.DownloadDataId = binary.BigEndian.Uint16(tagContent[5:7])
+					fallthrough
+				case 0x02:
+					entry.Logo.LogoId = binary.BigEndian.Uint16(tagContent[1:3]) & 0x1ff
+				case 0x03:
+					str, err := b24.DecodeString(tagContent[1:])
+					if err != nil {
+						log.Printf("failed on parsing logo str: %v", err)
+						continue
+					}
+					entry.Logo.LogoStr = str
+				}
+			case 0xFE:
+				// ignore
+			default:
+				log.Printf("NIT Network tagID: %x, content: %v", tagID, tagContent)
+			}
+		}
+		frame.Entries = append(frame.Entries, entry)
 	}
 	return &frame, nil
 }

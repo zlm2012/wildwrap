@@ -19,6 +19,8 @@ const (
 	EITCurrentSchedTIDMask uint8 = 0x50
 	EITOtherSchedTIDMask   uint8 = 0x60
 
+	RestrictDescTagID uint8 = 0x09
+
 	NetworkNameDescTagID   uint8 = 0x40
 	ServiceListDescTagID   uint8 = 0x41
 	StuffDescTagID         uint8 = 0x42
