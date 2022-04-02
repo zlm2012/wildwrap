@@ -223,7 +223,7 @@ func parseSDT(payload []byte, _ *Decoder) (Frame, error) {
 		entry.RunningState = SDTRunningState(payload[3] >> 5)
 		entry.Scramble = payload[3]&0x10 == 0x10
 		descLen := binary.BigEndian.Uint16(payload[3:5]) & 0xfff
-		descSlice := payload[10 : 10+descLen]
+		descSlice := payload[5 : 5+descLen]
 		payload = payload[5+descLen:]
 		descReader := bytes.NewReader(descSlice)
 		for {
@@ -271,7 +271,7 @@ func parseSDT(payload []byte, _ *Decoder) (Frame, error) {
 			case 0xFE:
 				// ignore
 			default:
-				log.Printf("NIT Network tagID: %x, content: %v", tagID, tagContent)
+				log.Printf("SDT tagID: %x, content: %v", tagID, tagContent)
 			}
 		}
 		frame.Entries = append(frame.Entries, entry)
