@@ -215,7 +215,7 @@ func parseSDT(payload []byte, _ *Decoder) (Frame, error) {
 	frame.OriginalNetworkID = binary.BigEndian.Uint16(payload[8:10])
 	frame.Entries = make([]SDTFrameEntry, 0)
 
-	payload = payload[11:]
+	payload = payload[11 : len(payload)-4]
 	for len(payload) > 0 {
 		entry := SDTFrameEntry{}
 		entry.ServiceID = binary.BigEndian.Uint16(payload[0:2])
